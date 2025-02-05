@@ -1,0 +1,120 @@
+"""
+Author: Nicole Wang
+Date: May 2022
+
+This script implements an information-theoretic calculation on the English language using a dictionary of words as outcomes and frequencies.
+"""
+
+import numpy as np
+from math import exp, log, sqrt
+import csv
+import pandas as pd
+import matplotlib.pyplot as plt
+import string
+
+# Make a list of column names to select relevant columns for the dataset
+col_list = ['word', 'frequency']
+
+# Read the CSV file using pandas and select only the columns we need
+df = pd.read_csv("WordFrequencies.csv", usecols=col_list)
+
+# Calculate the probability of each word (frequency of word divided by total sum of frequencies)
+df['prob'] = df['frequency'] / df['frequency'].sum()
+
+# Compute the entropy of the entire word distribution (using the formula H(X) = -sum(P(x) * log2(P(x))))
+df['entropy'] = -df['prob'] * np.log2(df['prob'])
+entropy = df['entropy'].sum()  # This is the total entropy of the word distribution
+
+# List of letters to analyze word frequencies by their first character
+letters = list(string.ascii_lowercase)
+
+letter_entropy = []  # This list will store the entropy for each letter (A-Z)
+
+# Loop through each letter and compute the conditional entropy for words starting with that letter
+for letter in letters:
+    subset = df[df['word'].str.startswith(letter, na=False)]  # Filter words starting with the given letter
+    subset['prob'] = subset['frequency'] / subset['frequency'].sum()  # Recalculate probability for this subset
+    subset['entropy'] = -subset['prob'] * np.log2(subset['prob'])  # Compute entropy for this subset
+    letter_entropy.append(subset['entropy'].sum())  # Store the summed entropy for this letter
+
+# Plot a bar chart showing the entropy conditioned on the first character of words
+plt.bar(letters, letter_entropy)
+plt.ylabel('conditional entropy')
+plt.title('entropy conditioned on first character')
+
+# Word identity list to store the information about word identity based on different features
+word_identity = [] 
+
+# Calculate the mutual information based on the first character:
+# The information is the difference between the entropy conditioned on the first character and the total entropy.
+letter_entropy = sum(letter_entropy)  # Sum the entropies for all letters
+word_identity.append(letter_entropy - entropy)
+
+df.dropna(inplace=True)  # Remove any rows with missing values to ensure clean data
+
+last_cha_entropy = []  # List to store entropy based on the last character
+
+# Loop through letters and compute entropy based on the last character of words
+for letter in letters:
+    subset = df[df['word'].str.endswith(letter, na=False)]  # Filter words ending with the given letter
+    subset['prob'] = subset['frequency'] / (sum(subset['frequency']))  # Recalculate probability for this subset
+    subset['entropy'] = -subset['prob'] * np.log2(subset['prob'])  # Compute entropy for this subset
+    last_cha_entropy.append(sum(subset['entropy']))  # Store the summed entropy for this letter
+
+last_cha_entropy = sum(last_cha_entropy)  # Total entropy based on the last character
+
+# Add the information based on the last character to the word identity list
+word_identity.append(last_cha_entropy - entropy)
+
+# List of vowels to consider when analyzing the first vowel of words
+vowels = ['a', 'e', 'i', 'o', 'u']
+
+# Function to find the first vowel in a word
+def first_vowel(word):
+    while word != '':
+        if word[0] in vowels:  # Check if the first character is a vowel
+            return word[0]
+        elif word != '':  # If not a vowel, move to the next character
+            word = word[1:]
+    else:
+        return None  # Return None if no vowels are found
+
+# Create a new column in the DataFrame that contains the first vowel of each word
+df['vowel'] = df['word'].apply(first_vowel)
+
+vowel_entropy = []  # List to store entropy for words starting with each vowel
+
+# Loop through vowels and compute entropy for words starting with that vowel
+for vowel in vowels:
+    same_vowel = df[df['vowel'] == vowel]  # Filter words with the same vowel
+    same_vowel['prob'] = same_vowel['frequency'] / same_vowel['frequency'].sum()  # Recalculate probability
+    same_vowel['entropy'] = -same_vowel['prob'] * np.log2(same_vowel['prob'])  # Compute entropy
+    vowel_entropy.append(sum(same_vowel['entropy']))  # Store the summed entropy for this vowel
+
+# Add the total vowel entropy to the word identity list
+word_identity.append(sum(vowel_entropy) - entropy)
+
+# Plot a bar chart showing how different features of words (first character, last character, first vowel)
+# convey information about word identity
+plt.bar(['first character','last character','first vowel'], word_identity)
+plt.ylabel('information about word identity')
+plt.title('information about word identity conveyed by first character, last character, and first vowel')
+
+# Calculate word length for each word and add as a new column
+df['length'] = df['word'].str.len()
+
+# Create a range of word lengths for plotting
+word_length = range(1, max(df['length']) + 1)
+
+ave_surprisal = list(word_length)  # Placeholder for average surprisal
+
+# Loop through each word length and compute the average surprisal for words with that length
+for i in word_length:
+    subset = df[df['length'] == i]  # Filter words with the current length
+    ave_surprisal[i-1] = np.mean(- np.log2(subset['prob']))  # Calculate average surprisal
+
+# Plot a bar chart showing the average surprisal for words of different lengths
+plt.bar(word_length, ave_surprisal)
+plt.title('average surprisal of words with the same length')
+plt.xlabel('word length')
+plt.ylabel('average surprisal')
